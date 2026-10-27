@@ -1,0 +1,26 @@
+# 通用碳账户管理系统 — Python 依赖
+# 安装方式: pip install -r requirements.txt
+
+# Web 框架
+flask>=2.3
+
+# 数据库
+# SQLite 无需额外依赖（Python 内置）
+# MySQL 可选: pip install mysql-connector-python
+
+# VCER API 通信
+requests>=2.28
+
+# MQTT 数据源（可选）
+paho-mqtt>=1.6
+
+# Modbus 数据源（可选）
+# pymodbus>=3.5
+
+# 报告生成
+jinja2>=3.1             # Word 模板引擎
+docxtpl>=0.16           # Word 报告模板渲染（支持 Jinja2 语法）
+python-docx>=0.8        # Word 文档底层操作（docxtpl 不可用时的兜底）
+
+# 生产服务器（可选）
+waitress>=2.1

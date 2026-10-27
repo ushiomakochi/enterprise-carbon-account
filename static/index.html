@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通用碳账户管理系统</title>
+<link rel="stylesheet" href="/static/css/carbon-ui.css?v=30">
+</head>
+<body>
+
+<div class="app-container" id="app">
+
+  <!-- 顶部导航 -->
+  <header class="top-bar">
+    <div class="logo-area">
+      <span class="logo-icon" aria-hidden="true">🌿</span>
+      <div class="brand-copy">
+        <span class="logo-text">碳账户管理平台</span>
+        <span class="brand-caption">CARBON ACCOUNT · 企业减排管理</span>
+      </div>
+    </div>
+    <div class="enterprise-info" id="enterpriseInfo">
+      <span class="enterprise-caption">当前企业</span>
+      <span id="entName">未配置企业</span>
+      <span class="sep">·</span>
+      <span id="entId"></span>
+    </div>
+  </header>
+
+  <!-- Tab 导航 -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="dashboard">📊 仪表盘</button>
+    <button class="tab-btn" data-tab="projects">📋 项目管理</button>
+    <button class="tab-btn" data-tab="monitor">📡 实时监测</button>
+    <button class="tab-btn" data-tab="reports">📄 报告中心</button>
+    <button class="tab-btn" data-tab="vcer">🏛 VCER 申请</button>
+    <button class="tab-btn" data-tab="logs">🗒 日志</button>
+    <button class="tab-btn tab-right" data-tab="settings">⚙ 设置</button>
+    <span class="tab-indicator no-anim" id="tabIndicator"></span>
+  </nav>
+
+  <!-- ========== Tab 1: 仪表盘 ========== -->
+  <section class="tab-content active" id="tab-dashboard">
+    <div class="page-heading"><div><span class="page-eyebrow">OVERVIEW / 总览</span><h1>碳资产总览</h1><p>集中查看项目进度、资产规模与最新动态。</p></div><span class="page-heading-mark" aria-hidden="true">01</span></div>
+    <div class="summary-cards" id="summaryCards">
+      <div class="stat-card">
+        <div class="stat-label">项目总数</div>
+        <div class="stat-value" id="statProjects">0</div>
+      </div>
+      <div class="stat-card accent-green">
+        <div class="stat-label">已申请碳资产项目</div>
+        <div class="stat-value" id="statApplied">0</div>
+      </div>
+      <div class="stat-card accent-blue">
+        <div class="stat-label">总碳资产</div>
+        <div class="stat-value" id="statTotalAssets">0 <small>tCO₂e</small></div>
+      </div>
+      <div class="stat-card accent-orange">
+        <div class="stat-label">可用碳资产 (净)</div>
+        <div class="stat-value" id="statAvailable">0 <small>tCO₂e</small></div>
+      </div>
+      <div class="stat-card accent-purple">
+        <div class="stat-label">已交易减排量</div>
+        <div class="stat-value" id="statTraded">0 <small>tCO₂e</small></div>
+      </div>
+      <div class="stat-card" style="border: 2px dashed var(--mint-border)">
+        <div class="stat-label">待核证减排量 <small>（历史汇总含已作废项目）</small></div>
+        <div class="stat-value" id="statPending" style="color: var(--mint-dark)">0 <small>tCO₂e</small></div>
+      </div>
+    </div>
+
+    <div class="grid-2col">
+      <div class="card">
+        <div class="card-header">📌 项目阶段统计</div>
+        <div class="card-body" id="stageStats">
+          <p class="muted">加载中...</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">🔄 最近活动</div>
+        <div class="card-body" id="recentActivity">
+          <p class="muted">加载中...</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Tab 2: 项目管理 ========== -->
+  <section class="tab-content" id="tab-projects">
+    <div class="page-heading"><div><span class="page-eyebrow">PROJECTS / 项目</span><h1>项目与设备</h1><p>管理项目资料、机器配置与历史数据。</p></div><span class="page-heading-mark" aria-hidden="true">02</span></div>
+    <div class="toolbar">
+      <button class="btn btn-primary" id="btnNewProject">+ 新建项目</button>
+      <button class="btn btn-outline" id="btnSyncAll"
+              title="依据每个项目自己的查询密钥+密码，向促进会查询最新的项目编号、碳资产和阶段状态并写回本地">🔄 刷新所有项目状态</button>
+      <button class="btn btn-outline" id="btnSyncVcerCodes" title="从 VCER 平台拉取已注册项目，按名称匹配回填本地缺失的项目编号">🔢 回填VCER编号</button>
+      <button class="btn btn-outline" id="btnBackfillAll"
+              title="对所有「历史 API 定时拉取」类型的机器，从基准日期到当前全量补拉历史数据（已存在的自动跳过）">⏳ 批量回溯历史</button>
+    </div>
+    <!-- 批量刷新的逐项目结果（平时隐藏） -->
+    <div class="card hidden" id="syncAllCard">
+      <div class="card-header">
+        🔄 刷新结果
+        <button class="btn btn-sm btn-outline" style="float:right"
+                onclick="document.getElementById('syncAllCard').classList.add('hidden')">收起</button>
+      </div>
+      <div class="card-body" id="syncAllResults"></div>
+    </div>
+    <div class="card">
+      <div class="card-header project-list-header"><span>项目列表</span><label class="project-search"><span aria-hidden="true">⌕</span><input id="projectSearchInput" class="input" type="search" placeholder="搜索项目名称或编号" aria-label="搜索项目名称或编号"></label></div>
+      <div class="card-body" id="projectList">
+        <p class="muted">加载中...</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal-overlay hidden" id="projectArchiveModal" style="z-index:1300">
+    <div class="modal-card" style="max-width:700px">
+      <div class="modal-header"><h2>项目只读档案</h2><button class="btn btn-sm btn-outline" onclick="document.getElementById('projectArchiveModal').classList.add('hidden')">关闭</button></div>
+      <div class="modal-body" id="projectArchiveContent"></div>
+    </div>
+  </div>
+
+  <!-- ========== 数据导入弹窗（由机器行「导入」按钮打开） ========== -->
+  <div class="modal-overlay hidden" id="importModal" style="z-index:1200">
+    <div class="modal-card" style="max-width:860px">
+      <div class="modal-header">
+        <span>📥 历史数据导入</span>
+        <button class="modal-close" onclick="App.closeImportModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin-bottom:14px">
+          把历史监测数据补录进系统。支持 <b>CSV</b> / <b>Excel(.xlsx)</b> 文件。
+          模板表头按当前项目公式生成（时间 + 公式原始字段 + 可选碳减排量）；碳减排量列填了直接用，没填则用公式重算。
+        </p>
+
+        <div class="form-group" style="max-width:420px">
+          <label>导入到项目 <span style="color:var(--danger)">*</span></label>
+          <select id="importProjectSel" class="input custom-select" data-placeholder="-- 选择项目 --" data-search="true">
+            <option value="">-- 选择项目 --</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="max-width:420px">
+          <label>导入到机器</label>
+          <select id="importMachineSel" class="input custom-select" data-placeholder="-- 选择机器 --">
+            <option value="">-- 选择机器 --</option>
+          </select>
+        </div>
+
+        <div id="importFieldHint" class="muted" style="margin-bottom:12px;font-size:13px"></div>
+
+        <div class="form-group">
+          <label>下载模板（按项目公式生成表头）</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-outline" id="btnImportTemplateCsv">⬇ CSV 模板</button>
+            <button class="btn btn-outline" id="btnImportTemplateXlsx">⬇ Excel 模板</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>数据文件（.csv / .xlsx）</label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <label class="btn btn-outline" style="cursor:pointer">
+              📂 选择文件
+              <input type="file" id="importFileInput" accept=".csv,.xlsx" style="display:none">
+            </label>
+            <span id="importFileName" class="muted">未选择文件</span>
+            <button class="btn btn-primary" id="btnStartImport">🚀 开始导入</button>
+          </div>
+        </div>
+
+        <div id="importStatus" class="status-msg hidden" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Tab 3: 实时监测 ========== -->
+  <section class="tab-content" id="tab-monitor">
+    <div class="page-heading"><div><span class="page-eyebrow">设备运行 · 数据监测</span><h1>实时监测</h1><p>查看设备读数与减排变化，及时发现异常。</p></div><span class="page-heading-mark" aria-hidden="true">03</span></div>
+    <div class="toolbar">
+      <select id="monitorProjectSel" class="input custom-select" data-placeholder="-- 选择项目 --" data-search="true">
+        <option value="">-- 选择项目 --</option>
+      </select>
+      <button class="btn btn-primary" id="btnRefreshMonitor">🔄 刷新</button>
+      <button class="btn btn-outline" id="btnCollectMonitor" title="立即从项目配置的数据源拉取数据，计算后写入数据库；查看已有数据请用刷新">📡 立即采集并入库</button>
+      <span class="auto-refresh">自动刷新：<span id="refreshCountdown">--</span> 秒</span>
+    </div>
+    <div id="monitorContent">
+      <p class="muted">请选择一个项目查看实时监测数据</p>
+    </div>
+  </section>
+
+  <!-- ========== Tab 4: 报告中心 ========== -->
+  <section class="tab-content" id="tab-reports">
+    <div class="page-heading"><div><span class="page-eyebrow">REPORTS / 报告</span><h1>报告中心</h1><p>选择项目与模板，生成并核对交付文件。</p></div><span class="page-heading-mark" aria-hidden="true">04</span></div>
+    <div class="report-center-layout">
+
+      <!-- ★ 左栏 ★ -->
+      <div class="rc-col rc-left">
+
+      <!-- 📄 单项目生成报告 -->
+      <div class="card report-card-generate">
+        <div class="card-header">📄 生成报告</div>
+        <div class="card-body">
+          <div class="form-group span-2">
+            <label>选择项目 <span style="color:var(--danger)">*</span></label>
+            <select id="reportProjectSel" class="input custom-select" data-placeholder="-- 选择项目 --" data-search="true">
+              <option value="">-- 选择项目 --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>报告类型</label>
+            <select id="reportTypeSel" class="input custom-select" data-placeholder="-- 选择报告类型 --">
+              <option value="">-- 加载中 --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>报告模板 <small id="reportTemplateCount" class="muted"></small></label>
+            <select id="reportTemplateSel" class="input custom-select" data-placeholder="-- 选择报告模板 --">
+              <option value="">-- 加载中 --</option>
+            </select>
+          </div>
+          <div class="report-form-row" id="reportDateRange">
+            <div class="form-group">
+              <label id="reportStartLabel">起始日期</label>
+              <input type="date" id="reportStartDate" class="input">
+            </div>
+            <div class="form-group">
+              <label id="reportEndLabel">截止日期</label>
+              <input type="date" id="reportEndDate" class="input">
+            </div>
+            <small class="muted" id="reportDateHint" style="display:block;margin-top:-6px"></small>
+          </div>
+          <div class="form-group span-2">
+            <label>文件名 <small class="muted">（可选，留空用默认）</small></label>
+            <input type="text" id="reportFilename" class="input" placeholder="如 {{ project.name }}-{{ report.type_label }} 或 project.name + '_核查报告'">
+            <small class="muted">支持 {{ key }} 变量与类 Python 表达式，如 {{ project.name }}、project.code + '_' + report.type_label</small>
+          </div>
+          <div id="tenYearTotalHint" class="ten-year-hint hidden"></div>
+          <button class="report-generate-btn" id="btnGenerateReport">🚀 生成报告</button>
+          <div id="reportGenStatus" class="status-msg hidden"></div>
+        </div>
+      </div>
+
+      <!-- 🏷️ 预设信息管理 -->
+      <div class="card collapsible-card" id="presetManageCard">
+        <div class="card-header collapsible-header" onclick="App.toggleCollapsible(this)">
+          🏷️ 预设信息管理
+          <small class="muted" id="projectPresetProjectName" style="font-weight:normal;margin-left:4px"></small>
+          <small id="templateKeysHint" style="font-weight:normal;margin-left:8px;font-size:12px"></small>
+          <button class="btn btn-sm btn-outline var-export-btn" onclick="event.stopPropagation();App.openPresetBatchModal()" title="通过 Excel 批量编辑多个项目的预设值">📊 批量编辑</button>
+        </div>
+        <div class="card-body collapsible-body">
+          <p class="preset-dnd-hint">💡 字段可拖拽：同区内拖到其他字段或分类上可调整分类与顺序；拖到另一侧区域即可在企业预设 / 全项目通用 / 项目预设之间移动。点击字段块会在其下方展开编辑框，未保存的修改会自动暂存。</p>
+
+          <div class="preset-dnd-grid">
+            <!-- 企业预设 -->
+            <section class="preset-zone" id="presetZoneEnterprise" data-zone="enterprise">
+              <div class="preset-zone-head">
+                <span class="preset-zone-title">🏢 企业预设</span>
+                <button class="btn btn-sm btn-primary" id="btnAddPreset">+ 新建</button>
+              </div>
+              <div class="preset-list" id="presetList"><p class="muted">加载中...</p></div>
+            </section>
+
+            <!-- 全项目通用预设 -->
+            <section class="preset-zone" id="presetZoneGlobal" data-zone="global">
+              <div class="preset-zone-head">
+                <span class="preset-zone-title" title="所有项目的值都相同">🌐 全项目通用预设</span>
+                <button class="btn btn-sm btn-primary" id="btnAddGlobalPreset">+ 新建</button>
+              </div>
+              <div class="preset-list" id="globalPresetList"><p class="muted">加载中...</p></div>
+            </section>
+
+            <!-- 项目预设 -->
+            <section class="preset-zone" id="presetZoneProject" data-zone="project">
+              <div class="preset-zone-head">
+                <span class="preset-zone-title">🏭 项目预设</span>
+                <button class="btn btn-sm btn-primary" id="btnAddProjectPreset" disabled>+ 新建</button>
+              </div>
+              <div class="preset-list" id="projectPresetList"><p class="muted">选择项目后加载</p></div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      </div><!-- /rc-left -->
+
+      <!-- ★ 右栏 ★ -->
+      <div class="rc-col rc-right">
+
+      <!-- 📋 报告历史 -->
+      <div class="card report-card-history">
+        <div class="card-header">
+          📋 报告历史
+          <span class="history-mode-toggle" style="float:right;display:inline-flex;gap:6px">
+            <button id="historyModeAll" class="btn btn-sm btn-primary" onclick="App.setReportHistoryMode('all')">全部</button>
+            <button id="historyModeProject" class="btn btn-sm btn-outline" onclick="App.setReportHistoryMode('project')">选中项目</button>
+          </span>
+        </div>
+        <div class="card-body" id="reportHistory">
+          <p class="muted">加载中...</p>
+        </div>
+      </div>
+
+      <!-- 📦 所有对象及其值 -->
+      <div class="card collapsible-card" id="computedVarsCard">
+        <div class="card-header collapsible-header" onclick="App.toggleCollapsible(this)">
+          📦 所有对象及其值与可用函数
+          <button class="btn btn-sm btn-outline var-export-btn" onclick="event.stopPropagation();App.exportVariableReference()">⬇ 导出字段清单</button>
+        </div>
+        <div class="card-body collapsible-body">
+          <!-- 🐍 代码控制台 -->
+          <div class="code-console">
+            <div class="code-console-title">🐍 代码控制台 <span class="muted" style="font-weight:normal;font-size:11px">调试变量用，如 type(report.end_date)</span></div>
+            <textarea id="consoleInput" class="input" rows="3" placeholder="type(report.end_date)&#10;report.end_date"></textarea>
+            <div class="code-console-bar">
+              <button class="btn btn-sm btn-primary" id="btnRunCode">▶ 运行</button>
+              <span class="muted" style="font-size:12px">当前项目：<span id="consoleProjectHint">未选择</span></span>
+            </div>
+            <div id="consoleOutput" class="console-output hidden"></div>
+          </div>
+
+          <div id="allObjectsRef"><p class="muted">选择项目后显示全部对象、变量及当前值</p></div>
+        </div>
+      </div>
+
+      </div><!-- /rc-right -->
+
+    </div>
+  </section>
+
+  <!-- ========== Tab 5: VCER 申请 ========== -->
+  <section class="tab-content" id="tab-vcer">
+    <div class="page-heading"><div><span class="page-eyebrow">VCER / 申请</span><h1>VCER 申请</h1><p>跟踪项目审核阶段与碳资产流程。</p></div><span class="page-heading-mark" aria-hidden="true">05</span></div>
+    <!-- 顶部操作栏 -->
+    <div class="toolbar">
+      <select id="vcerProjectSel" class="input custom-select" style="min-width:220px" data-placeholder="-- 选择项目 --" data-search="true">
+        <option value="">-- 选择项目 --</option>
+      </select>
+      <button class="btn btn-outline" id="btnRefreshVCER">🔄 刷新状态</button>
+      <span id="vcerKeyBadge" style="display:none;margin-left:auto;font-size:13px;color:var(--mint-dark)">
+        🔑 <code id="vcerKeyDisplay" style="background:var(--mint-light);padding:2px 8px;border-radius:4px"></code>
+      </span>
+    </div>
+
+    <!-- 项目信息栏（加载项目后显示） -->
+    <div id="vcerInfoBar" class="vcer-info-bar hidden">
+      <span id="vcerInfoText"></span>
+      <button id="btnVcerChangePwd" class="btn btn-sm btn-outline">🔒 修改密码</button>
+    </div>
+
+    <!-- 全部通过横幅 -->
+    <div id="vcerAllDone" class="vcer-all-done-banner hidden">
+      <span style="font-size:2rem">🎉</span>
+      <div>
+        <strong style="color:var(--success)">项目全部审核通过</strong>
+        <p style="margin:0;font-size:13px;color:var(--text-gray)" id="vcerDoneProjectName"></p>
+      </div>
+    </div>
+
+    <!-- 5阶段进度条 -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">📌 审核进度</div>
+      <div class="card-body">
+        <div id="vcerStageBar">
+          <p class="muted">请选择项目查看审核进度</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2col">
+      <!-- 左：阶段操作区（表单 + 遮罩层） -->
+      <div class="card">
+        <div class="card-header" id="vcerFormTitle">📝 提交材料</div>
+        <div class="card-body" style="position:relative;min-height:320px">
+          <!-- 阶段状态遮罩层：覆盖在表单上方 -->
+          <div id="vcerStageOverlay" class="vcer-stage-overlay hidden">
+            <div class="vcer-overlay-icon" id="vcerOverlayIcon"></div>
+            <div class="vcer-overlay-msg" id="vcerOverlayMsg"></div>
+            <div class="vcer-overlay-detail hidden" id="vcerOverlayDetail"></div>
+            <button class="btn btn-primary hidden" id="vcerOverlayBtn" style="margin-top:12px">📝 修改材料重提</button>
+          </div>
+          <!-- 表单内容 -->
+          <div id="vcerFormBody">
+            <p class="muted">请选择项目后操作</p>
+          </div>
+        </div>
+      </div>
+      <!-- 右：轮次历史 -->
+      <div class="card">
+        <div class="card-header">📋 提交历史 <span id="vcerHistoryStageLabel"></span></div>
+        <div class="card-body">
+          <!-- 轮次堆叠选择器（阶段3/4/5） -->
+          <div id="vcerRoundStack" class="vcer-round-stack-area"></div>
+          <!-- 轮次详情面板 -->
+          <div id="vcerRoundDetail" class="vcer-round-detail-panel">
+            <p class="muted">选择阶段查看提交历史</p>
+          </div>
+          <!-- 新增一轮按钮（阶段3/4/5） -->
+          <button id="btnVcerNewRound" class="btn btn-outline hidden" style="width:100%;margin-top:12px">➕ 新增一轮</button>
+          <p id="vcerRoundConstraint" class="hidden muted" style="margin-top:8px;font-size:12px;color:var(--warning)"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== VCER 密钥弹窗（阶段1提交成功后） ========== -->
+  <div class="modal-overlay hidden" id="vcerKeyModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>✅ 申请已提交</span>
+        <button class="modal-close" onclick="App.closeVCERKeyModal()">✕</button>
+      </div>
+      <div class="modal-body" style="text-align:center">
+        <div style="background:#FFF8E1;border:1px solid var(--warning);border-radius:8px;padding:12px;margin-bottom:16px;font-size:14px;color:#b7690f">
+          ⚠️ 请立即保存查询密钥，密钥丢失后将无法找回！
+        </div>
+        <div style="background:var(--mint-light);border:2px dashed var(--mint-main);border-radius:12px;padding:16px;font-size:1.4rem;font-weight:800;color:var(--mint-dark);font-family:monospace;letter-spacing:1px;word-break:break-all" id="vcerKeyModalText">VCER-XXXX-XXXX-XXXX</div>
+        <button class="btn btn-outline" style="margin-top:12px;width:100%" id="btnVcerCopyKey">📋 一键复制密钥</button>
+        <p id="vcerCopyMsg" class="hidden" style="color:var(--success);margin-top:8px">✅ 已复制到剪贴板</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== VCER 修改密码弹窗 ========== -->
+  <div class="modal-overlay hidden" id="vcerPwdModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>🔒 修改查询密码</span>
+        <button class="modal-close" onclick="App.closeVCERPwdModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>原密码</label>
+          <input type="password" id="vcerPwdOld" class="input" placeholder="请输入原密码">
+        </div>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" id="vcerPwdNew" class="input" placeholder="至少4位">
+        </div>
+        <div class="form-group">
+          <label>重复新密码</label>
+          <input type="password" id="vcerPwdConfirm" class="input" placeholder="再次输入新密码">
+        </div>
+        <div id="vcerPwdError" class="status-msg error hidden"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-outline" onclick="App.closeVCERPwdModal()">取消</button>
+          <button class="btn btn-primary" id="btnVcerPwdSubmit">确认修改</button>
+        </div>
+        <p style="text-align:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--mint-border);font-size:13px">
+          <a style="color:var(--warning);cursor:pointer;text-decoration:none" id="btnVcerForgotPwd">忘记原密码？申请管理员重置</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Tab: 日志 ========== -->
+  <section class="tab-content" id="tab-logs">
+    <div class="page-heading"><div><span class="page-eyebrow">ACTIVITY / 日志</span><h1>系统日志</h1><p>按项目和级别查看运行记录与异常。</p></div><span class="page-heading-mark" aria-hidden="true">06</span></div>
+    <div class="card">
+      <div class="card-header">
+        🗒 系统日志
+        <span class="log-toolbar" style="float:right;display:inline-flex;gap:8px;align-items:center">
+          <select id="logProjectSel" class="input custom-select cs-compact" data-placeholder="全部项目" data-search="true"
+                  style="min-width:180px">
+            <option value="">全部项目</option>
+          </select>
+          <select id="logLevelSel" class="input custom-select cs-compact" data-placeholder="日志级别"
+                  style="min-width:150px">
+            <option value="all">全部日志</option>
+            <option value="warning">warning 和 error</option>
+            <option value="error">仅 error</option>
+          </select>
+          <button class="btn btn-sm btn-outline" id="btnLogRefresh">🔄 刷新</button>
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="log-summary" id="logSummary"></div>
+        <div class="log-list" id="logList">
+          <p class="muted">加载中...</p>
+        </div>
+        <div class="log-more" id="logMore" style="display:none">
+          <button class="btn btn-sm btn-outline" id="btnLogMore">加载更多</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Tab 5: 设置 ========== -->
+  <section class="tab-content" id="tab-settings">
+    <div class="page-heading"><div><span class="page-eyebrow">SETTINGS / 配置</span><h1>企业设置</h1><p>维护企业信息、接口连接和运行参数。</p></div><span class="page-heading-mark" aria-hidden="true">07</span></div>
+    <div class="settings-layout">
+      <!-- 左栏：企业配置 -->
+      <div class="settings-col settings-left">
+        <div class="card">
+          <div class="card-header">⚙ 企业配置</div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>企业名称</label>
+              <input type="text" id="cfgName" class="input">
+            </div>
+            <div class="form-group">
+              <label>企业序号 (促进会分配)</label>
+              <input type="text" id="cfgId" class="input" placeholder="促进会分配的企业序号">
+            </div>
+            <div class="form-group">
+              <label>促进会 VCER API 地址</label>
+              <input type="text" id="cfgApiUrl" class="input">
+            </div>
+            <div class="form-group">
+              <label>促进会 API 密钥 (Bearer)</label>
+              <input type="password" id="cfgApiKey" class="input"
+                     autocomplete="new-password" placeholder="留空则不修改">
+              <small class="muted" id="cfgApiKeyHint"></small>
+              <button class="btn btn-outline btn-sm" id="btnClearApiKey" type="button">🗑 清除密钥</button>
+            </div>
+            <div class="form-group">
+              <label>历史数据 API 地址（所有机器共用）</label>
+              <input type="text" id="cfgHistoryApiBase" class="input"
+                     placeholder="如 https://api.example.com">
+              <small class="muted">填写企业数据平台基地址。认证、请求方法、路径、参数和响应解析由所选企业转换器实现；机器站点 ID 在项目编辑页单独填写。</small>
+            </div>
+            <div class="form-group">
+              <label>历史数据 API 账号</label>
+              <input type="text" id="cfgHistoryApiUser" class="input" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label>历史数据 API 密码</label>
+              <input type="password" id="cfgHistoryApiPwd" class="input"
+                     autocomplete="new-password" placeholder="留空则不修改">
+              <small class="muted" id="cfgHistoryApiPwdHint"></small>
+            </div>
+            <div class="form-group">
+              <label>自定义电网排放因子 (tCO₂/MWh)</label>
+              <input type="number" id="cfgEfGrid" class="input" step="0.0001" placeholder="默认 0.5777">
+            </div>
+            <div class="form-group">
+              <label class="switch-row">
+                <span class="switch">
+                  <input type="checkbox" id="cfgAnnualCodeEnabled">
+                  <span class="switch-slider"></span>
+                </span>
+                <span class="switch-label">年度核查报告编号递增
+                  <small class="muted">（如果不知道什么用的就不要动）</small></span>
+              </label>
+              <small class="muted">开启后，生成核查报告时自动按「项目编号 → 项目编号-1 → 项目编号-2 …」推导年度编号，模板中用 {{ report.annual_code }} 引用</small>
+            </div>
+            <div class="form-group">
+              <label class="switch-row">
+                <span class="switch">
+                  <input type="checkbox" id="cfgDevMode">
+                  <span class="switch-slider"></span>
+                </span>
+                <span class="switch-label">开发者选项
+                  <small class="muted">（解禁阶段门禁，测试用）</small></span>
+              </label>
+              <small class="muted">开启后，报告中心允许为「阶段已通过」的项目继续生成 PDD / 审定报告（正常情况下阶段一/二通过后禁止）。</small>
+            </div>
+            <button class="btn btn-primary" id="btnSaveConfig">💾 保存配置</button>
+            <div id="cfgStatus" class="status-msg hidden"></div>
+          </div>
+        </div>
+      </div>
+      <!-- 右栏：已加载计算公式 -->
+      <div class="settings-col settings-right">
+        <div class="card">
+          <div class="card-header">🧩 已加载计算公式</div>
+          <div class="card-body" id="hookList">
+            <p class="muted">加载中...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- 新建/编辑项目弹窗 -->
+<div class="modal-overlay hidden" id="projectModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span id="modalTitle">新建项目</span>
+      <button class="modal-close" id="btnModalClose">✕</button>
+    </div>
+    <div class="modal-body project-form-body">
+      <section class="project-form-section">
+        <div class="project-form-heading"><span class="project-form-step">01</span><div><h3>项目资料</h3><p>项目级信息与计算方法</p></div></div>
+        <div class="project-form-grid">
+          <div class="form-group project-form-wide">
+            <label for="projName">项目名称 *</label>
+            <input type="text" id="projName" class="input" placeholder="如：XX空压站节能项目">
+          </div>
+          <div class="form-group">
+            <label for="projHook">项目类型 / 计算公式 *</label>
+            <select id="projHook" class="input custom-select" data-placeholder="-- 选择公式 --"></select>
+          </div>
+          <div class="form-group">
+            <label for="projBaseline">基准日期</label>
+            <input type="date" id="projBaseline" class="input">
+          </div>
+          <div class="form-group project-form-wide">
+            <label for="projSummary">项目简介</label>
+            <textarea id="projSummary" class="input" rows="3" placeholder="说明项目边界、设备范围和实施内容"></textarea>
+          </div>
+        </div>
+      </section>
+      <section class="project-form-section project-machines-section">
+        <div class="project-form-heading"><span class="project-form-step">02</span><div><h3>机器与数据</h3><p>先保存项目，再逐台核对设备和数据来源</p></div></div>
+        <div class="machine-list" id="machineList"></div>
+        <small id="machineHint" class="machine-hint"></small>
+        <button type="button" class="btn btn-sm btn-outline machine-add-btn hidden" id="btnAddMachine">+ 加机器</button>
+      </section>
+      <section class="project-form-section">
+        <div class="project-form-heading"><span class="project-form-step">03</span><div><h3>减排量预估</h3><p>填写已经核定的业务数值；留空由系统按现有数据估算</p></div></div>
+        <div class="project-form-grid">
+          <div class="form-group">
+            <label for="projTenYearTotal">十年预估减排总量 (tCO₂e)</label>
+            <input type="number" step="any" id="projTenYearTotal" class="input" placeholder="如 30239">
+            <small>已敲定的十年总量优先；年预估值按十年总量平均。</small>
+          </div>
+          <div class="form-group">
+            <label for="projAnnualReduction">预估年减排量 (tCO₂e)</label>
+            <input type="number" step="any" id="projAnnualReduction" class="input" placeholder="如 3023.9">
+            <small>未填十年总量时使用；两项都留空则按监测数据估算。</small>
+          </div>
+        </div>
+      </section>
+      <details class="project-form-section project-form-details">
+        <summary>促进会查询凭据 <span>申请后填写</span></summary>
+        <div class="project-form-grid">
+          <div class="form-group">
+            <label for="projVcerKey">促进会查询密钥</label>
+            <input type="text" id="projVcerKey" class="input" placeholder="VCER-XXXX-XXXX-XXXX">
+          </div>
+          <div class="form-group">
+            <label for="projVcerPwd">促进会查询密码</label>
+            <input type="password" id="projVcerPwd" class="input">
+          </div>
+        </div>
+      </details>
+      <input type="hidden" id="projEditId">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btnModalCancel">取消</button>
+      <button class="btn btn-primary" id="btnModalSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 手动数据录入弹窗 -->
+<div class="modal-overlay hidden" id="manualDataModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span>录入监测数据</span>
+      <button class="modal-close" onclick="App.closeManualModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>机器</label>
+        <select id="manualMachineSel" class="input custom-select" data-placeholder="-- 选择机器 --">
+          <option value="">-- 选择机器 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>时间戳</label>
+        <input type="datetime-local" id="manualTs" class="input">
+      </div>
+      <div class="form-group">
+        <label>累计产气量 (m³)</label>
+        <input type="number" id="manualFlow" class="input" step="0.01" placeholder="如 5000">
+      </div>
+      <div class="form-group">
+        <label>累计耗电量 (kWh)</label>
+        <input type="number" id="manualPower" class="input" step="0.01" placeholder="如 200">
+      </div>
+      <input type="hidden" id="manualProjId">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="App.closeManualModal()">取消</button>
+      <button class="btn btn-primary" id="btnManualSave">保存并计算</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- 预设编辑弹窗 -->
+<div class="modal-overlay hidden" id="presetModal">
+  <div class="modal-card" style="max-width:520px">
+    <div class="modal-header">
+      <span id="presetModalTitle">新建/编辑预设</span>
+      <button class="modal-close" onclick="App.closePresetModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <input type="hidden" id="presetEditKey">
+
+      <div class="form-group">
+        <label>
+          预设 Key
+          <span style="color:var(--danger)">*</span>
+          <small>(英文/下划线，模板中 {{ preset.key }} 引用)</small>
+        </label>
+        <input type="text" id="presetKey" class="input" placeholder="如 verification_org">
+      </div>
+
+      <div class="form-group">
+        <label>
+          显示标签
+          <span style="color:var(--danger)">*</span>
+        </label>
+        <input type="text" id="presetLabel" class="input" placeholder="如 核查机构名称">
+      </div>
+
+      <div class="form-group">
+        <label>类型</label>
+        <select id="presetType" class="input custom-select" data-placeholder="选择类型">
+          <option value="text">文本 (text)</option>
+          <option value="richtext">富文本 (richtext)</option>
+          <option value="image">图片 (image)</option>
+          <option value="code">代码 (code)</option>
+          <option value="computed" id="presetTypeComputed">自动计算 (computed)</option>
+          <option value="table" id="presetTypeTable">表格 (table)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>分类</label>
+        <select id="presetCategory" class="input custom-select" data-placeholder="选择分类"></select>
+      </div>
+
+      <!-- 新增：排序 -->
+      <div class="form-group">
+        <label>排序</label>
+        <input
+          type="number"
+          id="presetSortOrder"
+          class="input"
+          placeholder="数字越小越靠前"
+          min="0"
+          step="1"
+        >
+      </div>
+
+      <!-- 项目预设专用：应用范围 -->
+      <div class="form-group hidden" id="presetScopeGroup">
+        <label>应用范围</label>
+        <select id="presetScope" class="input custom-select" data-placeholder="选择应用范围">
+          <option value="project">仅当前项目</option>
+          <option value="shared">所有项目通用（各项目分别填值）</option>
+          <option value="global">全项目通用（所有项目值相同）</option>
+        </select>
+        <small class="muted">「所有项目通用」各项目分别填值；「全项目通用」所有项目值相同，只填一次</small>
+      </div>
+
+      <div id="presetModalError" class="status-msg error hidden"></div>
+
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" style="flex:1" id="btnPresetSave">保存</button>
+        <button class="btn btn-outline" style="flex:1" onclick="App.closePresetModal()">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 预设批量编辑弹窗 -->
+<div class="modal-overlay hidden" id="presetBatchModal">
+  <div class="modal-card" style="max-width:640px">
+    <div class="modal-header">
+      <span>📊 预设批量编辑（Excel）</span>
+      <button class="modal-close" onclick="App.closePresetBatchModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>选择项目（多选）</label>
+        <div id="batchPresetProjectList" class="batch-project-list"><p class="muted">加载中...</p></div>
+        <div style="margin-top:4px;font-size:12px">
+          <a style="cursor:pointer;color:var(--mint-dark)" onclick="App.presetBatchToggleAll(true)">全选</a>
+          <span class="muted"> / </span>
+          <a style="cursor:pointer;color:var(--mint-dark)" onclick="App.presetBatchToggleAll(false)">全不选</a>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <button class="btn btn-primary" id="btnPresetBatchExport" style="width:100%">⬇ 导出 Excel 模板</button>
+        <small class="muted">导出后是一个「字段 × 项目」的表格，改完各单元格的值再导入即可批量更新</small>
+      </div>
+
+      <div class="form-group">
+        <label>导入修改后的 Excel</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="btn btn-outline" style="cursor:pointer">
+            📂 选择 .xlsx 文件
+            <input type="file" id="presetBatchFile" accept=".xlsx" style="display:none">
+          </label>
+          <span id="presetBatchFileName" class="muted">未选择文件</span>
+          <button class="btn btn-primary btn-sm" id="btnPresetBatchImport">🚀 导入</button>
+        </div>
+      </div>
+
+      <div id="presetBatchStatus" class="status-msg hidden" style="margin-top:8px"></div>
+      <div id="presetBatchDetail" style="margin-top:8px;font-size:12px;max-height:160px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 断档兜底：待处理清单 ========== -->
+<div class="modal-overlay hidden" id="gapListModal">
+  <div class="modal-card" style="max-width:820px">
+    <div class="modal-header">
+      <span>⚠ 断档兜底</span>
+      <button class="modal-close" onclick="App.closeGapListModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="margin-top:0;line-height:1.7">
+        这些是采集断档留下的行（断档期间没有源数据）。断档保护先把它们记成 <b>0</b>（不重复计算），
+        但这段里可能还有<b>没被核查覆盖</b>的量。点「兜底」先看这次会怎么算、会改成什么，
+        确认之后才写入。
+      </p>
+      <div id="gapListBody"><p class="muted">加载中...</p></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="App.closeGapListModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 断档兜底：确认框（计算结果 + 替换结果 + 流程）========== -->
+<div class="modal-overlay hidden" id="gapConfirmModal">
+  <div class="modal-card" style="max-width:900px">
+    <div class="modal-header">
+      <span>⚠ 确认执行断档兜底</span>
+      <button class="modal-close" onclick="App.closeGapConfirmModal()">✕</button>
+    </div>
+    <div class="modal-body" id="gapConfirmBody" style="max-height:70vh;overflow-y:auto">
+      <p class="muted">正在计算...</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="App.closeGapConfirmModal()">取消</button>
+      <button class="btn btn-danger" id="btnGapApply" disabled>确认执行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 历史数据批量回溯 ========== -->
+<div class="modal-overlay hidden" id="backfillModal">
+  <div class="modal-card" style="max-width:560px">
+    <div class="modal-header">
+      <span>⏳ 回溯历史数据</span>
+      <button class="modal-close" onclick="App.closeBackfillModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="margin-top:0;line-height:1.7">
+        对「历史 API 定时拉取」类型的机器，从选定起点到当前<b>全量补拉历史</b>并逐条入账。
+        已存在的数据按时间戳<b>自动跳过、不覆盖</b>——重复回溯只会补上次之后新增的，
+        全部已存在时结果就是「导入 0 条」，相当于提示无需回溯。
+      </p>
+      <div class="form-group">
+        <label>范围</label>
+        <input type="text" id="bfProject" class="input" disabled>
+      </div>
+      <div class="form-group">
+        <label>回溯开始日期（留空 = 用机器设置；机器未设则用项目基准日期）</label>
+        <input type="text" id="bfBaseline" class="input" placeholder="如 2022-01-01">
+      </div>
+      <div class="form-group">
+        <label>时间粒度</label>
+        <select id="bfGranularity" class="input custom-select">
+          <option value="day" selected>按天</option>
+          <option value="">跟随机器配置</option>
+          <option value="normal">原始粒度（normal，约1小时）</option>
+          <option value="hour">按小时</option>
+          <option value="month">按月</option>
+        </select>
+      </div>
+      <p class="muted">请求失败时同一时间块最多再试 2 次，每次约等 5 分钟；成功数据保留，仍失败的块会列入最终结果。服务重启后可再次回溯，已有记录会跳过。</p>
+      <div id="bfStatus" class="status-msg hidden"></div>
+      <div id="bfResults" style="margin-top:8px;font-size:12px;max-height:220px;overflow-y:auto"></div>
+      <div style="margin-top:12px;border-top:1px solid rgba(0,0,0,.06);padding-top:8px">
+        <div style="font-weight:bold;margin-bottom:4px">🕒 历史回溯任务</div>
+        <div id="bfJobs" style="font-size:12px;max-height:180px;overflow-y:auto"><p class="muted">加载中…</p></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="App.closeBackfillModal()">关闭</button>
+      <button class="btn btn-primary" id="btnBackfillStart">开始回溯</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 获取站点列表（dataId 选择） ========== -->
+<div class="modal-overlay hidden" id="siteListModal" style="z-index:1200">
+  <div class="modal-card" style="max-width:560px">
+    <div class="modal-header">
+      <span>🔍 获取站点列表</span>
+      <button class="modal-close" onclick="App.closeSiteListModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input type="text" id="siteSearch" class="input" placeholder="搜索项目名称（如 爱莲）"
+               oninput="App.filterSites()" style="flex:1">
+        <button class="btn btn-outline" onclick="App.refreshSites()">🔄 刷新</button>
+      </div>
+      <p class="muted" id="siteListMeta" style="margin:0 0 6px"></p>
+      <div id="siteListBody" style="max-height:340px;overflow-y:auto"><p class="muted">加载中...</p></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="App.closeSiteListModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 数据查看（折线图 + 表格 + 删除） ========== -->
+<div class="modal-overlay hidden" id="dataModal" style="z-index:1200">
+  <div class="modal-card" style="max-width:960px">
+    <div class="modal-header">
+      <span>📊 数据查看 — <span id="dataProjectName"></span></span>
+      <button class="modal-close" onclick="App.closeDataModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="data-view-toolbar" role="region" aria-label="监测数据筛选与操作">
+        <div class="data-view-filters">
+          <div class="data-view-machine">
+            <label class="data-view-field-label" for="dataMachineSel">查看机器</label>
+            <select id="dataMachineSel" class="input custom-select" data-placeholder="-- 全部机器 --"
+                    onchange="App.onDataMachineChange()"></select>
+          </div>
+          <label class="data-view-anomaly-toggle">
+            <input type="checkbox" id="dataAnomaliesOnly" onchange="App.onDataAnomaliesChange()">
+            <span>仅看异常读数</span>
+          </label>
+        </div>
+        <div class="data-view-summary">
+          <span class="data-view-total" id="dataTotal" role="status" aria-live="polite"></span>
+          <div class="data-view-actions">
+            <button class="btn btn-sm btn-outline data-view-review" onclick="App.openQualityModal()">异常事件与缺数核对</button>
+            <button class="btn btn-sm btn-danger" id="dataBulkDeleteBtn" onclick="App.bulkDeleteData()" disabled style="display:none">批量删除所选</button>
+            <button class="btn btn-sm btn-outline" id="dataRestoreBatchBtn" onclick="App.restoreLastDataBatch()" style="display:none">恢复上次批量删除</button>
+          </div>
+        </div>
+      </div>
+      <div id="dataSegments" class="continuity-segments"></div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-header">📈 趋势（最近 500 条：产气量 / 耗电量 / 本期减排量）</div>
+        <div class="card-body"><canvas id="dataChart" width="900" height="240" style="width:100%"></canvas></div>
+      </div>
+      <div style="max-height:360px;overflow-y:auto" id="dataTableWrap"><p class="muted">加载中…</p></div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;align-items:center" id="dataPager"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="App.closeDataModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="monitorReviewModal" style="z-index:1400">
+  <div class="modal-card" style="max-width:800px;max-height:90vh;overflow:auto">
+    <div class="modal-header">
+      <span>🔎 监测读数与减排核对</span>
+      <button class="modal-close" onclick="App.closeMonitorReview()">✕</button>
+    </div>
+    <div class="modal-body" id="monitorReviewBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="App.closeMonitorReview()">关闭</button>
+      <button class="btn btn-primary" id="btnSaveMonitorReview" onclick="App.saveMonitorReview()">保存核对记录</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay hidden" id="qualityModal" style="z-index:1500">
+  <div class="modal-card" style="max-width:1040px;max-height:92vh;overflow:auto">
+    <div class="modal-header">
+      <span>机器异常事件与修复预览</span>
+      <button class="modal-close" onclick="App.closeQualityModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted">保留数据平台原始读数。回退、缺数需先核对来源，再预览正式减排量变化；日结与细粒度交叠自动去重。</p>
+      <div class="quality-layout">
+        <div id="qualityCaseList" class="quality-case-list"></div>
+        <div id="qualityCaseDetail" class="quality-case-detail"><p class="muted">选择左侧事件查看读数与处理方式。</p></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="App.closeQualityModal()">关闭</button></div>
+  </div>
+</div>
+<script src="/static/js/monitor-view.js?v=3"></script>
+<script src="/static/js/app.js?v=54"></script>
+</body>
+</html>

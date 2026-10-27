@@ -1,0 +1,39 @@
+# Python runtime and local editor state
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+.claude/
+.env
+.env.*
+!.env.example
+
+# Operational data, credentials, generated reports and logs
+data/
+*.db
+*.db-*
+*.sqlite*
+*.log
+*.bak
+*.tmp
+exports/
+/reports/
+*.zip
+*.rar
+*.exe
+
+# Local inventories and OS files
+_dir_listing.txt
+_file_listing.txt
+.DS_Store
+Thumbs.db
+
+# Private enterprise workspaces and local selection
+/enterprises/*
+!/enterprises/README.md
+/.enterprise.local.json
+
+# Local Python test scripts (all directory levels)
+_test*.py
