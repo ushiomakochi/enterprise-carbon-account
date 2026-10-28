@@ -1,15 +1,5 @@
 # 通用碳账户管理系统
 
-> 开发与交付采用唯一通用主线、独立企业包和冻结发布副本；内部版本约定另行交接。
-
-> 企业包支持单包自动识别；移除包后重启恢复通用模式，具体选择规则见 [企业目录说明](enterprises/README.md)。
-
-> **企业目录结构：** 企业专属适配代码、模板与运行数据集中在 `enterprises/<企业标识>/`，由部署方另行提供，不随通用 Git 仓库分发。以下章节中的 `data/` 均指选定企业内的 `data/`。目录选择、交付与升级见 [企业目录说明](enterprises/README.md)。
-
-> 企业侧独立部署的碳账户管理系统。每个企业运行一套自己的实例，管理碳项目、计算碳减排量、自动生成核查报告，通过促进会 VCER API 完成碳资产申请与审定。
-
----
-
 ## 一、项目概述
 
 本系统是一个**独立项目**，由企业部署在自己的服务器上运行。它提供：
@@ -253,30 +243,6 @@ docker run -d -p 8080:5000 \
 | API | `api` | 平台提供「按时间段查历史」接口，每个周期拉一个时间窗批量入账（自动补断档，天然支持回溯） |
 | 手动录入 | `manual` | 无自动化数据源，人工录入或 CSV 导入 |
 
-### API 配置示例（定时拉取 + 回溯）
-
-平台接口形态（首个接入企业鑫钻的 ESG API，基地址 `https://oa.020xz.com.cn/api/esg`）：
-- 认证：`POST /auth/login`(username/password) → JWT（24h）→ 之后 `Authorization: Bearer`
-- 查数据：`POST /data/{dataId}`，body `{"beginDate","endDate","aliases"}`（逗号分隔一次查两个测点）
-- 批量：`POST /data/batch`，一次查多个 dataId；项目列表：`GET /projects`
-- 响应：`{"series":{"<alias>":[{value,apartValue,recordTime,...}]}}`，5 分钟粒度，recordTime 为 ISO 微秒
-
-**平台地址 + 账号密码是公司级**，配在「设置 → 企业配置」（账号密码即登录凭据）；机器编辑页单独填写站点 ID（dataId）；下面是保存后的机器数据源配置示例：
-
-```json
-{
-  "site_id": "1024",
-  "record_time_type": "normal"
-}
-```
-
-平台怎么认证、URL 怎么拼、响应怎么解析，全部写死在前置转换文件 `enterprises/xinzuan/normalizers/xinzuan.py` 里
-（登录拿 token 缓存 24h、401 自动重登、单机查询一次查两个测点）。机器的「前置转换」开关单独选择 `xinzuan`，
-保存在 `normalizer_config`；URL 统一在「设置 → 企业配置 → 历史数据 API 地址」填写，
-机器可编辑请求方法、Header、Params、Data 和指标别名，
-一键应用时仍保留每台机器的 `site_id`。单次查询窗口受平台限制
-（当前转换器默认按 28 天分块，实际限制以目标接口测试为准）。
-
 **批量回溯（历史补录）**：每台机器可配「历史回溯方式」（无 / API / 手动录入）。API 机器天然可回溯；
 MQTT 机器也可选「API 回溯」。项目卡片对含可回溯机器的项目显示「⏳ 回溯历史」，工具栏另有
 「⏳ 批量回溯历史」对全部项目。回溯时**同公司机器合并走平台批量接口**（一次请求拉多台，减少请求次数），
@@ -465,35 +431,13 @@ enterprise-carbon-account/
 
 本系统依赖促进会 VCER 系统提供以下 API：
 
-| API | 说明 | 状态 |
-|-----|------|------|
-| `GET /cn/api/carbon_assets` | 碳资产查询 | 已有 |
-| `GET /cn/api/carbon_projects` | 项目列表查询 | 已有 |
-| `GET /cn/api/air_compressor_params` | 空压站基准线参数获取 | 已有 |
-| `GET /cn/api/vcer/project_by_key` | 项目详情查询 | 已有 |
-| `GET /cn/api/vcer/stage_rounds` | 多轮核查历史 | 已有 |
-| `GET /cn/api/account/enterprise_summary` | 企业碳账户汇总 | **新增** |
-| `POST /cn/api/account/project_sync` | 项目数据同步 | **新增** |
-| `GET /cn/api/account/hook_params` | 公式参数查询 | **新增** |
-
-新增 API 已在 `E:\Python\main_app.py` 和 `E:\Python\db.py` 中实现。
-
----
-
-*项目版本: 1.1 | 最后更新: 2026-07-07*
-
-
-### 连续计量与计量阶段（2026-10-20）
-
-监测读数回零后按机器建立新计量阶段，阶段内继续计算，项目累计为各阶段之和。日期缺样且两端累计非负时按实测差计量；停机连续性由操作员在事件窗口预览并确认，已确认区间不再弹报告提示。具体项目缺口、站点映射、核查范围、备份与清理流程，以部署企业单独交付的操作手册和业务确认记录为准。
-
-当前应用没有登录鉴权，以下新增/调整的核对、生成与第三阶段操作仅接受真正回环 IP，转发头不能解锁局域网访问：
-
-- `GET /api/projects/:id/monitoring/segments`：机器阶段摘要；`monitoring/all` 增加可选 `segment_id`。
-- `POST /api/projects/:id/monitoring/continuity/preflight`：`start_date/end_date` → `warnings/signature/requires_confirmation`。
-- `POST /api/projects/:id/monitoring/quality/recheck`：`machine_id/start_row_id` → 本地任务 ID。
-- `GET/POST /api/projects/:id/monitoring/quality/probes/:job`：读取任务摘要；POST `action=refresh` 复用已存源记录刷新预览，POST `reviewer/note` 应用备份后的补录事务。接口不返回源响应体或待补入的原始记录数组。
-- 报告生成遇未确认缺口或阶段边界返回 HTTP 409、`code=continuity_confirmation_required` 及预检数据；提交 `continuity_ack=signature` 后继续。第三阶段表单新增本地 `verification_start/verification_end/continuity_ack`，不向促进会转发这三个字段。
-- 停机确认使用 `confirmed_shutdown`，其他连续性确认使用 `confirmed_continuous`；确认后新增区间内读数会使旧确认失效并保留原计量，事件窗口预览 `accept_new_data` 后才正式接纳新计算。所有确认、失效、撤销和报告提示均有数据库记录。
-
-`tools/reconcile_monitoring.py --preview` 提供年度、机器阶段、项目累计及待核证差异；`--apply` 应在停采后运行，会先完整备份，再在一笔事务中校验并应用。运行数据库、归档和报告文件均应随部署备份。
+| API | 说明 |
+|-----|------|
+| `GET /cn/api/carbon_assets` | 碳资产查询 |
+| `GET /cn/api/carbon_projects` | 项目列表查询 |
+| `GET /cn/api/air_compressor_params` | 空压站基准线参数获取 |
+| `GET /cn/api/vcer/project_by_key` | 项目详情查询 |
+| `GET /cn/api/vcer/stage_rounds` | 多轮核查历史 |
+| `GET /cn/api/account/enterprise_summary` | 企业碳账户汇总 |
+| `POST /cn/api/account/project_sync` | 项目数据同步 |
+| `GET /cn/api/account/hook_params` | 公式参数查询 |
