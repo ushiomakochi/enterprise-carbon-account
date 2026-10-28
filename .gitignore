@@ -37,3 +37,22 @@ Thumbs.db
 
 # Local Python test scripts (all directory levels)
 _test*.py
+
+# Private AI/agent instructions and internal project notes
+AGENTS.md
+AGENTS.override.md
+CLAUDE.md
+GEMINI.md
+AI_*.md
+AI-*.md
+agent_*.md
+agent-*.md
+/解释.md
+/版本管理与发布约定.md
+/数据清理与多企业使用说明.md
+
+# Private enterprise Markdown (including legacy pre-migration locations)
+*鑫钻*.md
+*xinzuan*.md
+*Xinzuan*.md
+**/鑫钻/**/*.md
