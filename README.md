@@ -46,25 +46,147 @@
 - Python 3.10+
 - pip
 
-### 3.2 安装
+### 3.2 各系统下载、安装与企业私有数据包导入
 
-```bash
-# 1. 进入项目目录
-cd enterprise-carbon-account
+交付分为两部分：**Git 仓库提供通用程序，维护者另行私发该企业的适配与数据包**。仅下载 Git 仓库不会得到企业已有项目、监测数据、凭据、报告和模板。下文用 `your_company` 代表实际交付的企业目录名，操作时必须替换为包内的真实名称，不要自行给企业目录改名。
 
-# 2. 安装依赖
-pip install -r requirements.txt
+#### 第一步：准备环境并下载通用程序
 
-# 3. 启动服务
-python app.py
+Windows、macOS、Linux 均需先安装 Git 和 Python。项目要求 Python 3.10+；现有 Windows 交付环境使用 Python 3.13，以下以 3.13 为例。macOS、Linux 需在目标机器验证依赖安装、中文字体和报告排版，不能直接沿用 Windows 虚拟环境。
 
-# 服务运行在 http://localhost:5000
+使用 Git 下载便于以后更新。仓库地址如下；若仓库为私有仓库，技术人员的 GitHub 账号须先获得访问权限，并完成 GitHub 身份验证：
+
+**Windows（PowerShell）：**
+
+```powershell
+git clone https://github.com/ushiomakochi/enterprise-carbon-account.git
+Set-Location .\enterprise-carbon-account
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-正式运行建议安装 `waitress` 后执行 `python serve.py`，或
-`waitress-serve --call --port=5000 serve:create_app`。该入口会先初始化数据库、公式和后台任务。
-不要使用 `waitress-serve app:app`：它只导入 Flask 对象，不会执行系统初始化。
-同一数据库只运行一个服务进程，避免重复采集和任务调度。
+在准备存放项目的本地目录打开 PowerShell 后执行。若没有 `py` 命令，改用已安装的 Python 3.13 可执行文件创建虚拟环境。后续始终使用本目录 `.venv` 中的 Python；这些命令无需激活环境，也不依赖 PowerShell 的脚本执行策略。
+
+**macOS（终端）：**
+
+```bash
+git clone https://github.com/ushiomakochi/enterprise-carbon-account.git
+cd enterprise-carbon-account
+python3.13 -m venv .venv
+./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m pip check
+```
+
+**Linux（终端）：**
+
+```bash
+git clone https://github.com/ushiomakochi/enterprise-carbon-account.git
+cd enterprise-carbon-account
+python3.13 -m venv .venv
+./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m pip check
+```
+
+macOS、Linux 如使用 `python3`，应先执行 `python3 --version` 确认版本，再用它替换创建环境的 `python3.13`。Linux 如果提示缺少 `venv` 或 `ensurepip`，需安装与所选 Python 对应的虚拟环境组件；包名取决于发行版及 Python 的安装方式。安装失败时先解决报错，不要继续启动服务。
+
+如只需离线交付，也可由维护者提供与企业包配套版本的通用源码压缩包，解压后从创建 `.venv` 开始操作；离线机器还需另行准备匹配操作系统、CPU 架构及 Python 版本的依赖安装包。ZIP 下载没有 Git 历史，不能直接执行后文的 `git pull`。GitHub 页面手动下载入口为 **Code → Download ZIP**；私有仓库仍需要访问权限。
+
+> `.venv` 不能从网络盘、另一台电脑或其他操作系统直接复制使用。迁机时重新创建；不要把交付包中旧的 `.venv`、`.git` 或 IDE 解释器配置覆盖到新项目。PyCharm 应打开整个项目目录，解释器选择当前目录的 `.venv\Scripts\python.exe`（Windows）或 `.venv/bin/python`（macOS/Linux），运行工作目录也设为当前项目根目录。
+
+#### 第二步：放入维护者私发的企业包（首次部署或完整迁机）
+
+1. 向维护者确认**通用代码版本与企业包版本是否配套**。如果交付说明指定了提交号或标签，应在首次启动前切换到指定版本；不能默认任意最新代码都兼容旧企业包。
+2. 原系统迁机时，先停止原机器及其他电脑上使用该数据库的服务、自动采集和回溯任务，再由维护者制作一致的企业目录备份。不要复制仍在写入的 SQLite 文件作为正式迁移包。
+3. 将收到的压缩包先解压到临时目录。找到**直接包含 `enterprise.json` 的企业文件夹**，检查包内企业名称、目录名与交付说明是否相符。Windows 可用资源管理器，macOS 可用 Finder，Linux 可用文件管理器或解压工具；三个系统的最终目录结构相同。
+4. 在**首次安装且目标企业目录不存在**的前提下，将这个完整文件夹复制到项目的 `enterprises/` 下。若目标目录已经存在，先停止并核对是否为现有生产数据，不要直接合并覆盖。
+5. 保留整个包，包括 `data/`、转换器、模板及附件。不要仅复制数据库，也不要把整个程序套进企业目录；不要将企业数据库放到仓库根目录的 `data/` 下。
+
+正确示例（按实际包的文件和目录为准）：
+
+```text
+enterprise-carbon-account/
+├─ app.py
+├─ serve.py
+├─ requirements.txt
+├─ .venv/                       # 在本机新建
+├─ .enterprise.local.json       # 下一步创建，可选
+└─ enterprises/
+   ├─ README.md
+   └─ your_company/             # 实际交付的企业文件夹
+      ├─ enterprise.json
+      ├─ README.md              # 本企业专用说明
+      ├─ normalizers/           # 接口认证、请求、字段转换
+      ├─ templates/reports/docx/ # 企业报告模板
+      ├─ presets_packs/         # 如交付包提供
+      ├─ data/
+      │  ├─ carbon_account.db   # 项目、机器、监测及业务记录
+      │  ├─ reports/            # 已生成的报告原文件
+      │  ├─ preset_images/      # 图片等配套资源
+      │  └─ project_archives/   # 已归档附件等
+      ├─ tools/                 # 如交付包提供
+      └─ docs/                  # 如交付包提供
+```
+
+这是**在服务启动前放入企业工作目录**，不是在网页的“导入监测数据”中上传数据库。数据库记录和报告原文件需要成套迁移；只有数据库、没有报告文件时，无法恢复原报告下载。不要用其他企业的数据库改名作为本企业的新库。
+
+#### 第三步：选择企业并核对路径
+
+系统启动时，`enterprises/` 中只有一个合法企业包会自动选中；没有包时进入独立的通用模式；多个包时要求明确指定。页面没有企业包切换按钮，更换包或选择配置后需要重启服务。
+
+为使正式部署的选择明确，可在**项目根目录**创建 `.enterprise.local.json`（UTF-8 编码，注意不是 `.json.txt`）：
+
+```json
+{"directory": "enterprises/your_company"}
+```
+
+`your_company` 必须与收到的文件夹名一致；保留包内原有 `enterprise.json`，其 `id` 应与目录名一致。若启动环境中已设置 `CARBON_ENTERPRISE_DIR`，它会优先于这个 JSON 文件，应先核对并清理旧路径，或改成正确的企业目录。
+
+**启动前执行路径检查，只打印路径，不启动采集：**
+
+Windows：
+
+```powershell
+.\.venv\Scripts\python.exe -c "import config; from enterprise_paths import ENTERPRISE_DIR; print('企业目录:', ENTERPRISE_DIR); print('数据库:', config.DATABASE_PATH); print('模板目录:', config.REPORT_DOCX_TEMPLATE_DIR)"
+```
+
+macOS、Linux：
+
+```bash
+./.venv/bin/python -c "import config; from enterprise_paths import ENTERPRISE_DIR; print('企业目录:', ENTERPRISE_DIR); print('数据库:', config.DATABASE_PATH); print('模板目录:', config.REPORT_DOCX_TEMPLATE_DIR)"
+```
+
+数据库应指向当前安装位置的 `enterprises/your_company/data/carbon_account.db`。完整迁机时，先确认这个文件确实存在；如果误指向 `enterprises/default/`，或仍指向旧网络盘，先修正企业包位置、环境变量或选择文件，再启动。**启动后项目列表为空不代表迁移成功**，可能只是进入了通用空库；不要因此重复新建原有项目。
+
+#### 第四步：启动与交付核验
+
+Windows：
+
+```powershell
+.\.venv\Scripts\python.exe serve.py --host 127.0.0.1 --port 5000
+```
+
+macOS、Linux：
+
+```bash
+./.venv/bin/python serve.py --host 127.0.0.1 --port 5000
+```
+
+在**运行服务的电脑**打开 `http://127.0.0.1:5000`。本例只监听本机，服务器以外的电脑不能直接使用该地址访问。需要内网部署时，应另外确认访问控制和敏感操作的本机访问限制，再配置监听地址及网络入口。
+
+首次启动会执行数据库初始化及适用的结构升级，并启动后台任务；启动前应保留备份、确认采集配置，并保证旧服务已经停止。同一数据库只运行一个服务进程，避免重复采集和任务调度。不要使用 `waitress-serve app:app`，它只导入 Flask 对象，不执行完整初始化；开发调试可使用同一虚拟环境的 `python app.py`。
+
+启动后按本企业交付清单核对：企业名称与设置、项目及机器数量、历史监测数据与业务记录、前置转换文件、报告模板和历史报告下载。macOS、Linux 还需核对中文字体与 Word 报告排版。原文件缺失的历史报告不会因迁移自动恢复；其他历史绝对路径若无法映射，也需结合实际文件核查。核验不符时先停止排查，不要直接批量回溯或重算生产数据。
+
+#### 后续升级：更新通用程序，保留现有企业数据
+
+1. 阅读新版本说明，确认企业适配包与数据库兼容；记录当前 `git rev-parse HEAD`，停止所有使用该库的服务及后台任务，备份**整个当前企业目录**和所用代码版本。
+2. 在项目根目录执行 `git status`，确认本地代码修改已经妥善保存，再执行 `git pull --ff-only`。如出现冲突或无法快进，先处理版本分歧，不要强制覆盖。首次克隆后通常已配置跟踪分支；ZIP 安装需按发布说明另行更换通用源码。
+3. 用本机虚拟环境重新执行前述 `python -m pip install -r requirements.txt` 和 `python -m pip check`，并按版本说明处理必要的迁移。
+4. **保留企业当前 `data/`，不要把首次交付包中的旧数据库重新覆盖进去。** 如另发了适配更新，只按清单更新转换器、模板等指定文件，并先比对企业技术人员自己的修改。
+5. 重新检查企业目录、数据库路径，启动并完成核验。数据库结构已经升级时，单独回退 Git 提交不一定兼容，需要按该版本的恢复方案处理。
+
+企业包和 `.enterprise.local.json` 已被 Git 忽略，不随通用代码正常提交；升级前仍要核对 `git status` 和已跟踪文件，不能依赖忽略规则保护被强制添加或以前已跟踪的私有文件。不要将私发包、数据库、密码或报告上传到通用仓库。更多加载规则见 [企业目录与更新方式](enterprises/README.md)。虚拟环境与下载方式可参阅 [Python venv 文档](https://docs.python.org/3/library/venv.html)和 [GitHub 克隆仓库说明](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)。
 
 ### 3.3 配置
 
